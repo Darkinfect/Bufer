@@ -1,4 +1,4 @@
-# Makefile для Lab 5 - Модули ядра Linux
+# Makefile для Lab 5 - Модули ядра Linux (Arch Linux)
 #
 # Использование:
 #   make           - Собрать все модули
@@ -7,19 +7,25 @@
 #   make load      - Загрузить модуль (указать MODULE=xxx)
 #   make unload    - Выгрузить модуль (указать MODULE=xxx)
 
+
 # Имя текущей директории (для out-of-tree сборки)
 PWD := $(shell pwd)
 
+
 # Путь к исходникам ядра
+# Arch использует /usr/lib/modules/<version>/build
 KERNEL_DIR := /lib/modules/$(shell uname -r)/build
+
 
 # Список модулей для сборки
 obj-m += hello_module.o
 obj-m += proc_module.o
 obj-m += chardev_module.o
 
+
 # Флаги компиляции (опционально)
 ccflags-y := -std=gnu99 -Wno-declaration-after-statement
+
 
 # Основная цель - сборка всех модулей
 all:
@@ -29,7 +35,9 @@ all:
 	@echo "✓ Modules built successfully!"
 	@echo "  To load: sudo insmod <module>.ko"
 	@echo "  To view logs: dmesg | tail"
+	@echo "  Or use: journalctl -k -f"
 	@echo ""
+
 
 # Очистка
 clean:
@@ -38,6 +46,7 @@ clean:
 	rm -f *.o *.ko *.mod.c *.mod *.symvers *.order .*.cmd
 	rm -rf .tmp_versions
 	@echo "✓ Cleanup complete"
+
 
 # Загрузка модуля
 load:
@@ -52,7 +61,8 @@ load:
 	fi
 	@echo "Loading $(MODULE).ko..."
 	sudo insmod $(MODULE).ko
-	@echo "✓ Module loaded. Check 'dmesg | tail' for output"
+	@echo "✓ Module loaded. Check 'dmesg | tail' or 'journalctl -k -f' for output"
+
 
 # Выгрузка модуля
 unload:
@@ -65,6 +75,7 @@ unload:
 	sudo rmmod $(MODULE)
 	@echo "✓ Module unloaded. Check 'dmesg | tail' for output"
 
+
 # Информация о модулях
 info:
 	@echo "=== Loaded Modules ==="
@@ -73,6 +84,7 @@ info:
 	@echo ""
 	@echo "=== Built Modules ==="
 	@ls -lh *.ko 2>/dev/null || echo "No modules built yet (run 'make')"
+
 
 # Быстрый тест hello_module
 test-hello: all
@@ -90,6 +102,7 @@ test-hello: all
 	@echo "Output:"
 	@dmesg | tail -5
 
+
 # Быстрый тест proc_module
 test-proc: all
 	@echo "=== Testing proc_module ==="
@@ -105,6 +118,7 @@ test-proc: all
 	@echo ""
 	@echo "dmesg output:"
 	@dmesg | tail -5
+
 
 # Быстрый тест chardev_module
 test-chardev: all
@@ -135,9 +149,10 @@ test-chardev: all
 	@echo "dmesg output:"
 	@dmesg | tail -10
 
-# Проверка окружения
+
+# Проверка окружения (адаптировано для Arch)
 check:
-	@echo "=== Environment Check ==="
+	@echo "=== Environment Check (Arch Linux) ==="
 	@echo -n "Kernel version: "
 	@uname -r
 	@echo -n "Kernel headers: "
@@ -145,27 +160,66 @@ check:
 		echo "✓ Found at $(KERNEL_DIR)"; \
 	else \
 		echo "✗ NOT FOUND"; \
-		echo "  Install with: sudo apt install linux-headers-$$(uname -r)"; \
+		echo "  Install with: sudo pacman -S linux-headers"; \
+		echo "  Or for LTS kernel: sudo pacman -S linux-lts-headers"; \
 	fi
 	@echo -n "Build tools: "
-	@which gcc > /dev/null && echo "✓ gcc installed" || echo "✗ gcc NOT installed"
+	@which gcc > /dev/null && echo "✓ gcc installed" || echo "✗ gcc NOT installed (install: sudo pacman -S base-devel)"
+	@echo -n "Make: "
+	@which make > /dev/null && echo "✓ make installed" || echo "✗ make NOT installed"
 	@echo -n "Module loading: "
 	@which insmod > /dev/null && echo "✓ insmod available" || echo "✗ insmod NOT available"
 	@echo ""
 	@echo "Kernel module support:"
-	@zcat /proc/config.gz 2>/dev/null | grep -E "CONFIG_MODULES|CONFIG_MODULE" | head -5 || \
-	 cat /boot/config-$$(uname -r) 2>/dev/null | grep -E "CONFIG_MODULES|CONFIG_MODULE" | head -5 || \
-	 echo "  (Unable to check kernel config)"
+	@if [ -f /proc/config.gz ]; then \
+		zcat /proc/config.gz | grep -E "CONFIG_MODULES=|CONFIG_MODULE_" | head -5; \
+	elif [ -f /boot/config-$$(uname -r) ]; then \
+		cat /boot/config-$$(uname -r) | grep -E "CONFIG_MODULES=|CONFIG_MODULE_" | head -5; \
+	else \
+		echo "  (Unable to check kernel config - usually enabled by default in Arch)"; \
+	fi
+	@echo ""
+	@echo "Arch-specific info:"
+	@echo -n "  Kernel package: "
+	@pacman -Q linux 2>/dev/null || pacman -Q linux-lts 2>/dev/null || echo "unknown"
+	@echo -n "  Headers package: "
+	@pacman -Q linux-headers 2>/dev/null || pacman -Q linux-lts-headers 2>/dev/null || echo "NOT installed"
+
+
+# Установка зависимостей для Arch
+install-deps:
+	@echo "=== Installing dependencies for Arch Linux ==="
+	@echo "This will install kernel headers and build tools..."
+	@echo ""
+	@if pacman -Q linux >/dev/null 2>&1; then \
+		echo "Installing headers for 'linux' kernel..."; \
+		sudo pacman -S --needed linux-headers base-devel; \
+	elif pacman -Q linux-lts >/dev/null 2>&1; then \
+		echo "Installing headers for 'linux-lts' kernel..."; \
+		sudo pacman -S --needed linux-lts-headers base-devel; \
+	else \
+		echo "Installing base-devel (you may need to install headers manually)..."; \
+		sudo pacman -S --needed base-devel; \
+		echo ""; \
+		echo "Please install kernel headers for your kernel:"; \
+		echo "  linux kernel: sudo pacman -S linux-headers"; \
+		echo "  linux-lts: sudo pacman -S linux-lts-headers"; \
+		echo "  linux-zen: sudo pacman -S linux-zen-headers"; \
+	fi
+	@echo ""
+	@echo "✓ Dependencies installed"
+
 
 # Справка
 help:
-	@echo "Lab 5 Kernel Modules - Makefile"
+	@echo "Lab 5 Kernel Modules - Makefile (Arch Linux)"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  make              - Build all modules"
 	@echo "  make clean        - Remove built modules and temporary files"
 	@echo "  make check        - Check environment (kernel headers, tools)"
 	@echo "  make info         - Show loaded and built modules"
+	@echo "  make install-deps - Install required packages (pacman)"
 	@echo ""
 	@echo "Module operations:"
 	@echo "  make load MODULE=<name>    - Load a module"
@@ -182,20 +236,30 @@ help:
 	@echo "  make test-proc                 # Test proc module"
 	@echo "  make unload MODULE=proc_module # Unload proc module"
 	@echo ""
+	@echo "Arch-specific notes:"
+	@echo "  - Use 'journalctl -k -f' to monitor kernel logs in real-time"
+	@echo "  - Install headers: sudo pacman -S linux-headers"
+	@echo "  - Or for LTS: sudo pacman -S linux-lts-headers"
+	@echo "  - Build tools: sudo pacman -S base-devel"
+	@echo ""
 	@echo "Manual operations:"
 	@echo "  sudo insmod hello_module.ko                  # Load module"
 	@echo "  sudo insmod hello_module.ko message=\"Test\"  # Load with parameter"
 	@echo "  lsmod | grep hello_module                    # Check if loaded"
 	@echo "  dmesg | tail                                 # View kernel logs"
+	@echo "  journalctl -k -f                             # Follow kernel logs"
 	@echo "  sudo rmmod hello_module                      # Unload module"
 	@echo ""
 	@echo "For more info, see README.md"
 
+
 # Дополнительная информация при ошибках сборки
-.PHONY: all clean load unload info test-hello test-proc test-chardev check help
+.PHONY: all clean load unload info test-hello test-proc test-chardev check help install-deps
+
 
 # Предупреждения
 .SILENT: help check info
+
 
 # Если make вызван без цели, показать help
 .DEFAULT_GOAL := all
